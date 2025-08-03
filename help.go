@@ -65,8 +65,8 @@ var selectedKeys = selectedKeymap{
 			key.WithHelp("↓/j", "move down"),
 		),
 	Back: key.NewBinding(
-			key.WithKeys("return"),
-			key.WithHelp("return", "back to home"),
+			key.WithKeys("backspace"),
+			key.WithHelp("backspace", "back to home"),
 		),
 	Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),

@@ -11,20 +11,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type mail struct {
+type Mail struct {
 	name string
 	id string
 }
 
 type model struct {
-	mails []mail
+	mails []Mail
 	cursor int
 	selected bool
 	help help.Model
 	table table.Model
+	api_key string
+	error *string
 
 	height int
 	width int
+
+	loaded bool
 }
 
 func initialModel() model {
@@ -35,11 +39,7 @@ func initialModel() model {
 		{ Title: "Source", Width: 20 },
 	}
 
-	rows := []table.Row{
-		{ "2025-07-28 17:31 EST", "Letter printed.", "Shelburne, VT 05482 US", "Hack Club" },
-		{ "2025-07-28 17:42 EST", "Letter mailed!", "Shelburne, VT 05482 US", "Hack Club" },
-		{ "2025-07-30 10:49 EST", "[OP481] Distribution of originating mail from collections, mailers, etc.", "ESSEX JUNCTION, VT 05452", "USPS IV-MTR" },
-	}
+	rows := []table.Row{}
 
 	t := table.New(
 		table.WithColumns(columns),
@@ -59,12 +59,20 @@ func initialModel() model {
 		Bold(false)
 	t.SetStyles(s)
 
-
 	var model model = model{
-		mails: []mail{mail{ "Letter: summer of making prize!", "aaaadfg" }, mail{ "Letter: Summer of Making free stickers!", "bbbbdsfg" }},
+		mails: []Mail{},
 		selected: false,
 		help: help.New(),
 		table: t,
+		loaded: false,
+	}
+
+	config, err := ReadConfig()
+	if err == nil {
+		model.api_key = config.api_key
+	} else {
+		errorMsg := err.Error()
+		model.error = &errorMsg
 	}
 
 	model.help.Styles = help.Styles{
@@ -81,6 +89,9 @@ func initialModel() model {
 }
 
 func (m model) Init() tea.Cmd {
+	if m.api_key != "" {
+		return fetchMails(m.api_key)
+	}
 	return nil
 }
 
@@ -103,6 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			    }
 		    }
 	} else {
+		// Selected keybinds handling
 		switch msg := msg.(type) {
 			case tea.KeyMsg:
 				switch msg.String() {
@@ -127,15 +139,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "?", "h":
 					m.help.ShowAll = !m.help.ShowAll
 			}
+		case fetchMsg:
+			m.loaded = true
+
+			if msg.error != nil {
+				errorMsg := msg.error.Error()
+				m.error = &errorMsg
+				return m, nil
+			}
+
+			for _, mail := range msg.mails.Mails {
+				Type := strings.ToUpper(mail.Type[:1]) + strings.ToLower(mail.Type[1:])
+				m.mails = append(m.mails, Mail{ fmt.Sprintf("%s: %s", Type, mail.Title), mail.ID })
+			}
 	}
 
     return m, nil
 }
 
 func (m model) View() string {
-
 	s := "\n"
 	tab := "  "
+
+	style_error := lipgloss.NewStyle().
+		PaddingBottom(1).
+		PaddingTop(1).
+		PaddingLeft(2).
+		PaddingRight(2).
+		Border(lipgloss.RoundedBorder())
+
+	if m.error != nil {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, style_error.Render(*m.error))
+	}
+
+	if !m.loaded {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, style_error.Render("Loading..."))
+	}
 
 	if m.selected {
 		s += tab
@@ -162,15 +201,8 @@ func (m model) View() string {
 		s += m.mails[m.cursor].id
 		s += "\n\n\n"
 
-		tableView := ""
-		tableViewSplitted := strings.Split(m.table.View(), "\n")
-
-		for _, line := range tableViewSplitted {
-			tableView += fmt.Sprintf("%s%s\n", tab, line)
-		}
-
+		tableView := tab + strings.ReplaceAll(m.table.View(), "\n", "\n"+tab)
 		s += tableView
-
 	} else {
 		s += tab
 		s += "Your mails\n"

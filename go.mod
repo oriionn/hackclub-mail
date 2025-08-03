@@ -3,6 +3,7 @@ module github.com/oriionn/hackclub-mail
 go 1.24.5
 
 require (
+	gopkg.in/ini.v1 v1.67.0
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/bubbles v0.21.0 // indirect
 	github.com/charmbracelet/bubbletea v1.3.6 // indirect
