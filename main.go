@@ -12,8 +12,22 @@ import (
 )
 
 type Mail struct {
-	name string
-	id string
+	Name string
+	ID string
+}
+
+type MailNerd struct {
+	Time string
+	Description string
+	Location string
+	Source string
+}
+
+type MailDetails struct {
+	Created string
+	Status string
+	Tags []string
+	Nerds []MailNerd
 }
 
 type model struct {
@@ -24,11 +38,11 @@ type model struct {
 	table table.Model
 	api_key string
 	error *string
-
 	height int
 	width int
-
 	loaded bool
+	details MailDetails
+	incompatible bool
 }
 
 func initialModel() model {
@@ -110,6 +124,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			                m.cursor++
 			            }
 			        case "enter":
+						if strings.Contains(strings.ToLower(m.mails[m.cursor].Name), "letter") {
+							data, err := fetchLetter(m.mails[m.cursor].ID, m.api_key)
+							if err != nil {
+								errorMsg := err.Error()
+								m.error = &errorMsg
+								break
+							}
+
+							m.details.Created = strings.Split(data.Letter.CreatedAt, "T")[0]
+							m.details.Status = strings.ToUpper(data.Letter.Status[:1]) + strings.ToLower(data.Letter.Status[1:])
+							m.details.Tags = data.Letter.Tags
+
+							var rows []table.Row
+
+							for _, event := range data.Letter.Events {
+								m.details.Nerds = append(m.details.Nerds, MailNerd{
+									Source: event.Source,
+									Description: event.Description,
+									Time: strings.Split(event.HappenedAt, "T")[0],
+									Location: event.Location,
+								})
+
+								rows = append(rows, table.Row{strings.Split(event.HappenedAt, "T")[0], event.Description, event.Location, event.Source})
+							}
+
+							m.table.SetRows(rows)
+						} else {
+							m.incompatible = true
+						}
 			            m.selected = true
 			    }
 		    }
@@ -124,6 +167,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.table.MoveDown(1)
 					case "backspace":
 						m.selected = false
+						m.incompatible = false
 				}
 		}
 	}
@@ -177,28 +221,32 @@ func (m model) View() string {
 	}
 
 	if m.selected {
+		if m.incompatible {
+			return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, style_error.Render("This mail's type isn't supported with this version."))
+		}
+
 		s += tab
-		s += m.mails[m.cursor].name
+		s += m.mails[m.cursor].Name
 		s += "\n"
 
 		s += strings.Repeat(tab, 2)
 		s += "Created at "
-		s += "2025-07-28"
+		s += m.details.Created
 		s += "\n\n"
 
 		s += strings.Repeat(tab, 2)
 		s += "Status   : "
-		s += "Mailed"
+		s += m.details.Status
 		s += "\n"
 
 		s += strings.Repeat(tab, 2)
 		s += "Tag      : "
-		s += "summer-of-making"
+		s += strings.Join(m.details.Tags, ", ")
 		s += "\n"
 
 		s += strings.Repeat(tab, 2)
 		s += "Letter ID: "
-		s += m.mails[m.cursor].id
+		s += m.mails[m.cursor].ID
 		s += "\n\n\n"
 
 		tableView := tab + strings.ReplaceAll(m.table.View(), "\n", "\n"+tab)
@@ -212,7 +260,7 @@ func (m model) View() string {
 	            cursor = "›"
 	        }
 
-	        s += fmt.Sprintf("%s%s %s\n", tab, cursor, mail.name)
+	        s += fmt.Sprintf("%s%s %s\n", tab, cursor, mail.Name)
 	    }
 	}
 
